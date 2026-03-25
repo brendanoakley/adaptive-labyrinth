@@ -120,6 +120,10 @@ def main():
     episode = 0
     steps = 0
 
+    # True when the agent is replaying its cached optimal path instead of
+    # doing Q-learning. Flips to False whenever the maze changes.
+    following_path = False
+
     while True:
         # --- Event handling -------------------------------------------
         for event in pygame.event.get():
@@ -155,20 +159,55 @@ def main():
                     renderer.flash_timers = {}  # clear any leftover flashes
                     episode = 0
                     steps = 0
+                    following_path = False
 
         # --- Simulation step ------------------------------------------
         if not paused:
-            _, done = step_agent(maze, agent)
-            steps += 1
+            if following_path:
+                # -------------------------------------------------------
+                # PATH-FOLLOW MODE: the agent already knows the optimal
+                # route. Skip Q-learning and just advance one step along
+                # the cached path. This is the "muscle memory" mode.
+                # -------------------------------------------------------
+                next_idx = agent.path_idx + 1
+                if next_idx < len(agent.best_path):
+                    agent.pos = agent.best_path[next_idx]
+                    agent.path_idx = next_idx
+                    agent.steps += 1
+                    steps += 1
+                    done = (agent.pos == maze.exit)
+                else:
+                    done = True
+            else:
+                # -------------------------------------------------------
+                # Q-LEARNING MODE: explore and learn as usual
+                # -------------------------------------------------------
+                _, done = step_agent(maze, agent)
+                steps += 1
 
-            # Decay exploration rate every 10 steps
-            if steps % 10 == 0:
-                agent.decay_epsilon()
+                # Decay exploration rate every 10 steps
+                if steps % 10 == 0:
+                    agent.decay_epsilon()
 
-            # Adversary acts every ADVERSARY_INTERVAL steps
+                # First time reaching the exit on this maze layout:
+                # BFS the true shortest path and cache it for future episodes.
+                if done and not agent.has_valid_path(maze.signature()):
+                    path = maze.shortest_path((0, 0), maze.exit)
+                    if path:
+                        agent.record_best_path(path, maze.signature())
+
+            # Adversary acts every ADVERSARY_INTERVAL steps.
+            # We snapshot the signature before and after so we can tell
+            # whether the maze actually changed (some strategies may be
+            # blocked by solvability checks and change nothing).
             if steps % ADVERSARY_INTERVAL == 0:
+                old_sig = maze.signature()
                 adversary.act(malice)
                 renderer.add_flashes(adversary.flash_cells)
+                if maze.signature() != old_sig:
+                    # Maze changed — cached path is now wrong, go back to Q-learning
+                    agent.invalidate_path()
+                    following_path = False
 
             # Episode ends when agent reaches exit or times out
             if done or steps >= MAX_STEPS_PER_EPISODE:
@@ -176,6 +215,11 @@ def main():
                 steps = 0
                 agent.reset_episode()
                 agent.episode = episode
+
+                # Start next episode in path-follow mode if maze is unchanged
+                following_path = agent.has_valid_path(maze.signature())
+                if following_path:
+                    agent.path_idx = 0
 
                 # Every 15 episodes, regenerate the maze entirely
                 # (keeps the simulation from getting stale)
@@ -190,9 +234,10 @@ def main():
                     adversary.agent = agent
                     renderer.maze = maze
                     renderer.flash_timers = {}
+                    following_path = False   # new maze, path is gone
 
         # --- Render ---------------------------------------------------
-        renderer.draw(agent, episode, steps, malice, paused)
+        renderer.draw(agent, episode, steps, malice, paused, following_path)
         clock.tick(SPEEDS[speed_idx])
 
 

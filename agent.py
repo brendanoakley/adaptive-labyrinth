@@ -51,6 +51,15 @@ class QLearningAgent:
         self.episode = 0       # How many episodes have completed
         self.total_reward = 0  # Accumulated reward this episode
 
+        # --- Optimal path cache ---
+        # Once the agent finds the exit, we BFS the true shortest path
+        # and store it here. If the maze hasn't changed next episode, the
+        # agent can skip Q-learning entirely and just replay the route.
+        # Think of it like muscle memory: "I know exactly how to get there."
+        self.best_path = None       # List of (r, c) cells: start → exit
+        self.best_path_sig = None   # Maze signature when the path was computed
+        self.path_idx = 0           # Which step of best_path we're currently at
+
     # ------------------------------------------------------------------
     # Q-table access
     # ------------------------------------------------------------------
@@ -144,3 +153,33 @@ class QLearningAgent:
         self.steps = 0
         self.episode = 0
         self.total_reward = 0
+        self.invalidate_path()
+
+    # ------------------------------------------------------------------
+    # Optimal path cache
+    # ------------------------------------------------------------------
+
+    def record_best_path(self, path, maze_sig):
+        """
+        Save the shortest known path and the maze fingerprint it's valid for.
+        Called once per maze layout, the first time the agent reaches the exit.
+        """
+        self.best_path = path
+        self.best_path_sig = maze_sig
+        self.path_idx = 0
+
+    def invalidate_path(self):
+        """
+        Throw away the cached path. Called whenever the maze mutates so
+        the agent doesn't blindly follow a route that no longer exists.
+        """
+        self.best_path = None
+        self.best_path_sig = None
+        self.path_idx = 0
+
+    def has_valid_path(self, maze_sig):
+        """
+        True if we have a cached path AND the maze is identical to when
+        we computed it. If the maze changed even one wall, returns False.
+        """
+        return self.best_path is not None and self.best_path_sig == maze_sig

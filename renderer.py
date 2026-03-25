@@ -31,6 +31,7 @@ FLASH_COLOR   = (255, 210, 50)    # yellow flash for mutated cells
 HUD_BG        = (8, 8, 16)
 HUD_TEXT      = (200, 200, 220)
 HUD_SUBTEXT   = (110, 110, 135)
+PATH_MODE_COLOR = (0, 230, 120)   # green label shown when agent follows optimal path
 
 FLASH_DURATION = 45     # frames a mutated cell stays highlighted
 
@@ -76,13 +77,13 @@ class Renderer:
     # Main draw call (called once per frame from main.py)
     # ------------------------------------------------------------------
 
-    def draw(self, agent, episode, steps, malice, paused):
+    def draw(self, agent, episode, steps, malice, paused, following_path=False):
         self.screen.fill(DARK_BG)
 
         self._draw_maze()
         self._draw_exit()
         self._draw_agent(agent)
-        self._draw_hud(agent, episode, steps, malice, paused)
+        self._draw_hud(agent, episode, steps, malice, paused, following_path)
 
         self._tick_flashes()
         pygame.display.flip()
@@ -134,7 +135,7 @@ class Renderer:
         # Inner core (smaller, bright circle)
         pygame.draw.circle(self.screen, AGENT_CORE, (cx, cy), CELL_SIZE // 2)
 
-    def _draw_hud(self, agent, episode, steps, malice, paused):
+    def _draw_hud(self, agent, episode, steps, malice, paused, following_path=False):
         """Draw the stats bar at the bottom of the screen."""
         hud_top = (2 * self.maze.rows + 1) * CELL_SIZE
         pygame.draw.rect(self.screen, HUD_BG,
@@ -160,3 +161,8 @@ class Renderer:
             self.font_sub.render(ctrl_line, True, HUD_SUBTEXT),
             (10, hud_top + 30),
         )
+
+        # Show a green PATH MODE badge when the agent is replaying its optimal route
+        if following_path:
+            badge = self.font_main.render("[ PATH MODE ]", True, PATH_MODE_COLOR)
+            self.screen.blit(badge, (self.width - badge.get_width() - 10, hud_top + 8))

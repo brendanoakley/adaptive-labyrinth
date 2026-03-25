@@ -180,3 +180,55 @@ class Maze:
 
         self.grid[wr][wc] = 0
         return True
+
+    # ------------------------------------------------------------------
+    # Pathfinding & fingerprinting
+    # ------------------------------------------------------------------
+
+    def shortest_path(self, start, goal):
+        """
+        BFS to find the fewest-steps path from start to goal.
+        Returns a list of (r, c) cells start→goal (inclusive),
+        or None if no path exists.
+
+        Used to cache the provably optimal route once the agent
+        finds the exit for the first time on a given maze layout.
+        """
+        if start == goal:
+            return [start]
+
+        # came_from maps each cell to the cell we arrived from.
+        # Following backpointers from goal → start lets us reconstruct
+        # the full path at the end (like a parent pointer in Java BFS).
+        came_from = {start: None}
+        queue = deque([start])
+
+        while queue:
+            r, c = queue.popleft()
+            for nr, nc in self.get_neighbors(r, c):
+                if (nr, nc) not in came_from:
+                    came_from[(nr, nc)] = (r, c)
+                    if (nr, nc) == goal:
+                        # Reconstruct by walking backpointers
+                        path = []
+                        node = goal
+                        while node is not None:
+                            path.append(node)
+                            node = came_from[node]
+                        return list(reversed(path))
+                    queue.append((nr, nc))
+        return None   # goal is unreachable
+
+    def signature(self):
+        """
+        A hash that uniquely identifies the current maze state.
+        Changes whenever any wall is added/removed OR the exit moves.
+
+        Used to check whether a cached optimal path is still valid —
+        if the signature matches, the path is safe to replay.
+
+        In Java terms: like overriding hashCode() so you can use the
+        maze as a key in a HashMap.
+        """
+        grid_hash = hash(tuple(tuple(row) for row in self.grid))
+        return (grid_hash, self.exit)
